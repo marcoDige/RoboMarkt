@@ -117,7 +117,6 @@ def solve_routing_problem_vrpy(markets, cx, cy, vc, fc, capacity):
                 c[i,j] = distance.euclidean((cx[i],cy[i]),(cx[j],cy[j])) * vc
 
     G = nx.from_numpy_matrix(np.matrix(c), create_using=nx.DiGraph)
-    print(G.edges(data=True))
     DEMAND = {i:1 for i in range(1,n)}
     set_node_attributes(G, values=DEMAND, name="demand")
     G = relabel_nodes(G, {0: "Source", n: "Sink"})
@@ -171,7 +170,7 @@ def plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_mark
         plt.show()
 
 def main():
-    for i in range(2):
+    for i in range(1):
         
         if i == 0:
             instance = INSTANCE_1
@@ -212,7 +211,7 @@ def main():
 
         # Output file writing
         
-        f = open("solution-" + instance + ".txt","w")
+        f = open("optimal_solution-" + instance + ".txt","w")
 
         f.write(str(total_cost) + "\n")
         f.write(str(opening_cost) + "\n")

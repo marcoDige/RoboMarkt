@@ -51,102 +51,131 @@ def solve_opening_problem(instance):
 
 # This function elaborate an approximate solution of the second half of the problem (truck routing)
 def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
+    print("\nRouting Problem")
     n = len(markets) # n is the number of markets
-    n_to_refurbish = n - 1 # n_to_refurbish is the number of market that trucks has to refurbish
-    a_matrix = np.zeros((n, n))
+    n_to_supply = n - 1 # n_to_supply is the number of market that trucks has to refurbish
+    d_matrix = np.zeros((n, n))
     for i in range(n):
         for j in range(n):
-            a_matrix[i][j] = distance.euclidean((cx[i], cy[i]), (cx[j], cy[j]))
+            d_matrix[i][j] = distance.euclidean((cx[i], cy[i]), (cx[j], cy[j])) * vc
 
-    G = nx.from_numpy_matrix(np.matrix(a_matrix), create_using=nx.DiGraph)
+    G = nx.from_numpy_matrix(np.matrix(d_matrix), create_using=nx.DiGraph)
     G = nx.relabel_nodes(G, {i:markets[i] for i in range(n)})
 
     ZONE_UP = {markets[i]:'up' for i in range(1,n) if(cy[i] >= cy[0])} 
     ZONE_DOWN = {markets[i]:'down' for i in range(1,n) if(cy[i] < cy[0])}
-    nx.set_node_attributes(G, False, "stocked")
+
+    nx.set_node_attributes(G, False, "supply")
     nx.set_node_attributes(G, values=ZONE_UP, name="zone")
     nx.set_node_attributes(G, values=ZONE_DOWN, name="zone")
     nx.set_node_attributes(G, values={1:"root"}, name="zone")
 
-    if(n_to_refurbish % capacity == 0):
-        trucks_number = int(n_to_refurbish / capacity)
+    # Number of truck is setted at the minimum number of truck necessary to supply all markets
+    if(n_to_supply % capacity == 0):
+        trucks_number = int(n_to_supply / capacity)
     else:
-        trucks_number = int(n_to_refurbish / capacity + 1)
+        trucks_number = int(n_to_supply / capacity + 1)
 
-    trucks_paths = []
+    best_obj = 0
+    pz_ub = 50
+    pz_lb = 0
+    best_penality_zone = -1
+    best_trucks_path = []
 
+    if(n_to_supply % capacity == 0 and trucks_number == int(n_to_supply / capacity)):
+        possible_capacity_reduct = 0
+    else:
+        possible_capacity_reduct = int((trucks_number * capacity - n_to_supply)/trucks_number)
     
-    for i in range(trucks_number):
-        trucks_paths.append([])
-        node = 1
-        for j in range(capacity + 1):
-            trucks_paths[i].append(node)
-            G.nodes[node]['stocked'] = True
-            l_t, path_t = nx.single_source_dijkstra(G, source = node)
-            best_next_node = 0
+    for iteration in range(n_to_supply):
+        for capacity_reductor in range(possible_capacity_reduct + 1):
+            for roundness in range(capacity):
+                penality_zone_changed = 0
+                for penality_zone in range(pz_lb,pz_ub + 1):
+                    # Reset all supply attributes for a new execution
+                    for i in G.nodes():
+                        G.nodes[i]['supply'] = False
+                    
+                    # Reset cost to elaborate a new one
+                    routing_cost = trucks_number * fc
 
-            if(j >= capacity - 2):
-                l_1, path_1 = nx.single_source_dijkstra(G, source = 1)
-                
-                l_t[1] = 1000000
-                for key in l_t.keys():
-                    if(key != 1):
-                        l_t[key] = statistics.mean([l_t[key], l_1[key]])
-                l_t = {k: v for k, v in sorted(l_t.items(), key=lambda item: item[1])}
-                
+                    trucks_path = []
 
-            for key in l_t.keys():
-                if(key != 1 and G.nodes[node]['zone'] == G.nodes[key]['zone']):
-                    l_t[key] -= min(l_t.keys())
-            l_t = {k: v for k, v in sorted(l_t.items(), key=lambda item: item[1])}
+                    for i in range(trucks_number):
+                        trucks_path.append([])
+                        node = 1
+                        trucks_path[i].append(node)
+                        G.nodes[node]['supply'] = True
 
-            for k in l_t.keys():
-                if(not G.nodes[k]['stocked']):
-                    best_next_node = k
-                    break
+                        for j in range(capacity - capacity_reductor):
+                            next_node = 0
+                            priority = {i:G.edges[node, i]['weight'] for i in G.neighbors(node) if(not G.nodes[i]['supply'])}
+                            
+                            # Last x element has to go closer to the node 1
+                            if(j >= capacity - roundness):
+                                root_closeness = {i:G.edges[1, i]['weight'] for i in G.neighbors(1) if(not G.nodes[i]['supply'])}
+                                
+                                for key in priority.keys():
+                                    priority[key] = statistics.mean([priority[key], root_closeness[key]])
+                            
+                            # Normalization of the priority score
+                            priority = {key: value/max(priority.values()) for key,value in priority.items()}
 
-            node = best_next_node
-            if(node == 0):
-                break
+                            # Adjust the priority score with +x if the nodes aren'iteration in the same zone
+                            for key in priority.keys():
+                                if(G.nodes[node]['zone'] != G.nodes[key]['zone']):
+                                    priority[key] += penality_zone/100
 
-        trucks_paths[i].append(1)
-    
-    # Output formatting data
+                            # Sort the priority dict by ascending score
+                            priority = {k: v for k, v in sorted(priority.items(), key=lambda item: item[1])}
 
-    trucks_path_dicts = []
-    trucks_active_arcs = []
+                            if(i == 0 and node == 1):
+                                next_node = list(priority.keys())[iteration]
+                            elif(bool(priority)):
+                                next_node = list(priority.keys())[0]
 
-    for k in range(trucks_number):
-        trucks_active_arcs.append([])
-        trucks_path_dicts.append({})
+                            node = next_node
+                            if(node == 0):
+                                break
+                            
+                            trucks_path[i].append(node)
+                            G.nodes[node]['supply'] = True
+                            routing_cost += G.edges[trucks_path[i][-2], trucks_path[i][-1]]['weight']
 
-        for i in range(len(trucks_paths[k]) - 1):
-            if(trucks_paths[k][i] == 1):
-                if(trucks_paths[k][i + 1] == 1):
-                    trucks_path_dicts[k][1] = 1
-                    trucks_active_arcs[k].append((1,1))
-                else:
-                    trucks_path_dicts[k][1] = trucks_paths[k][i + 1]
-                    trucks_active_arcs[k].append((1,trucks_paths[k][i + 1]))
-            else:
-                if(trucks_paths[k][i + 1] == 1):
-                    trucks_path_dicts[k][trucks_paths[k][i]] = 1
-                    trucks_active_arcs[k].append((trucks_paths[k][i],1))
-                else:
-                    trucks_path_dicts[k][trucks_paths[k][i]] = trucks_paths[k][i + 1]
-                    trucks_active_arcs[k].append((trucks_paths[k][i],trucks_paths[k][i + 1]))
+                        trucks_path[i].append(1)
+                        routing_cost += G.edges[trucks_path[i][-2], trucks_path[i][-1]]['weight']
 
-    routing_cost = 0
-    for k in range(len(trucks_active_arcs)):
-        for (i,j) in trucks_active_arcs[k]:
-            routing_cost += G.edges[i,j]['weight']
-    routing_cost += trucks_number * fc
+                    if(best_obj == 0):
+                        best_obj = routing_cost
+                        best_trucks_path = trucks_path
+                        best_penality_zone = penality_zone
+                        penality_zone_changed = 1
+                    elif(routing_cost < best_obj):
+                        best_obj = routing_cost
+                        best_trucks_path = trucks_path
+                        best_penality_zone = penality_zone
+                        penality_zone_changed = 1
 
+                if(best_penality_zone != 0 and penality_zone_changed):
+                    pz_ub = best_penality_zone + 5
+                    pz_lb = best_penality_zone - 5
+                    if(pz_lb < 0):
+                        pz_lb = 0
+        
+        # If the best penality zone remain unchanged for a lot of iterations, value upper bound an lower bound will converge
+        if(iteration % trucks_number == 0):
+            pz_ub -= 1
+            pz_lb += 1
+            if(pz_lb > pz_ub):
+                pz_ub = best_penality_zone
+                pz_lb = pz_ub
+        
+        print("Current best solution: "  + str(best_obj))
 
-    return routing_cost, trucks_number, trucks_active_arcs, trucks_path_dicts
+    return best_obj, best_trucks_path
 
 # This function plots the market in their location (using the cx and cy coordinates) and the routes for each truck
-def plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_markets, trucks_active_arcs, trucks_number):
+def plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_markets, trucks_path):
 
     # Market Locations with routes plotting
         plt.figure(figsize=(8,6))
@@ -154,16 +183,16 @@ def plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_mark
         plt.scatter(cx_markets[0], cy_markets[0], c="r")
         for i in range(len(markets)):
             plt.annotate(str(markets[i]), (cx_markets[i], cy_markets[i]))
-        color = iter(cm.rainbow(np.linspace(0, 1, trucks_number)))
-        for active_arcs in trucks_active_arcs:
+        color = iter(cm.rainbow(np.linspace(0, 1, len(trucks_path))))
+        for path in trucks_path:
             c = next(color)
-            for (i,j) in active_arcs:
-                plt.plot([cx_original[i - 1], cx_original[j - 1]], [cy_original[i - 1], cy_original[j - 1]], c=c, alpha=0.3)
-        plt.title(instance + " market locations and refurbish routes")
+            for i in range(len(path) - 1):
+                plt.plot([cx_original[path[i] - 1], cx_original[path[i+1] - 1]], [cy_original[path[i] - 1], cy_original[path[i+1] - 1]], c=c, alpha=0.3)
+        plt.title(instance + " Market locations and Trucks' routing")
         plt.show()
 
 # This function write the problem solution in a txt file
-def solution_writer(instance, total_cost, opening_cost, routing_cost, markets, trucks_path_dicts, trucks_number):
+def solution_writer(instance, total_cost, opening_cost, routing_cost, markets, trucks_path):
     
     f = open("solution-" + instance + ".txt","w")
     f.write(str(total_cost) + "\n")
@@ -175,13 +204,12 @@ def solution_writer(instance, total_cost, opening_cost, routing_cost, markets, t
         else:
             f.write(str(l))
     f.write("\n")
-    for i in range(trucks_number):
-        elem = 1
-        f.write(str(1))
-        while(trucks_path_dicts[i][elem] != 1):
-            f.write("," + str(trucks_path_dicts[i][elem]))
-            elem = trucks_path_dicts[i][elem]
-        f.write("," + str(1))
+    for path in trucks_path:
+        for i in range(len(path)):
+            if(path[i] == 1 and i == 0):
+                f.write(str(path[i]))
+            else:
+                f.write("," + str(path[i]))
         f.write("\n")
 
 def main():
@@ -199,13 +227,13 @@ def main():
 
         # The problem is splitted in 2 sub problems: opening and routing problem. Call functions to solve the 2 sub-problems
         opening_cost, cx_original, cy_original, cx_markets, cy_markets, markets, vc, fc, capacity = solve_opening_problem(instance)
-        routing_cost, trucks_number, trucks_active_arcs, trucks_path_dicts = solve_routing_problem(markets, cx_markets, cy_markets, vc, fc, capacity)
+        routing_cost, trucks_path = solve_routing_problem(markets, cx_markets, cy_markets, vc, fc, capacity)
         
         timer_stop = timeit.default_timer()
         
         print("Elapsed time to solve the problem: ", timer_stop - timer_start)
 
-        plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_markets, trucks_active_arcs, trucks_number)
+        plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_markets, trucks_path)
 
         # Total solution
 
@@ -214,7 +242,7 @@ def main():
         print("Total Optimized Objective Function value: ", total_cost)
 
         # Write solution in a txt file
-        solution_writer(instance, total_cost, opening_cost, routing_cost, markets, trucks_path_dicts, trucks_number)
+        solution_writer(instance, total_cost, opening_cost, routing_cost, markets, trucks_path)
         
     
     
