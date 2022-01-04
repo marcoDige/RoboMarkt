@@ -1,12 +1,12 @@
 import random
 
-number = 100
-r = random.randint(10,20)
+number = 500
+r = random.randint(50,70)
 Vc = random.randint(1,4)
 Fc = random.randint(1,100)
 capacity = random.randint(5,20)
-maxX = 100
-maxY = 100
+maxX = 500
+maxY = 500
 maxC = 20
 
 with open('minimart-'+str(number)+'.dat', 'w') as f:

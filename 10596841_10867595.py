@@ -9,13 +9,14 @@ import timeit
 
 INSTANCE_1 = "minimart-I-50"
 INSTANCE_2 = "minimart-I-100"
+AMPL_INSTALLATION_PATH = "C:\Program Files\\ampl" # Write here the ampl installation path
 
 # This function elaborate an optimal solution of the first half of the problem (opening problem).
 # It uses a cplex solver in an AMPL environment (using the amplpy library) 
 def solve_opening_problem(instance):
 
     # Environment('full path to the AMPL installation directory')
-    ampl = AMPL(Environment("C:\Program Files\\ampl"))
+    ampl = AMPL(Environment(AMPL_INSTALLATION_PATH))
     ampl.set_option('solver', 'cplex')
     # Load the AMPL model from file
     ampl.read("10596841_10867595_opening.mod")
@@ -89,7 +90,7 @@ def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
     
     for iteration in range(n_to_supply):
         for capacity_reductor in range(possible_capacity_reduct + 1):
-            for roundness in range(capacity):
+            for roundness in range(int(capacity/2)):
                 penality_zone_changed = 0
                 for penality_zone in range(pz_lb,pz_ub + 1):
                     # Reset all supply attributes for a new execution
@@ -124,7 +125,7 @@ def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
                             # Adjust the priority score with +x if the nodes aren'iteration in the same zone
                             for key in priority.keys():
                                 if(G.nodes[node]['zone'] != G.nodes[key]['zone']):
-                                    priority[key] += penality_zone/100
+                                    priority[key] += penality_zone/100 
 
                             # Sort the priority dict by ascending score
                             priority = {k: v for k, v in sorted(priority.items(), key=lambda item: item[1])}
@@ -142,8 +143,16 @@ def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
                             G.nodes[node]['supply'] = True
                             routing_cost += G.edges[trucks_path[i][-2], trucks_path[i][-1]]['weight']
 
+                            # Discard the solution if the routing cost overtake the best obj result
+                            if(routing_cost > best_obj and best_obj != 0):
+                                break
+
                         trucks_path[i].append(1)
                         routing_cost += G.edges[trucks_path[i][-2], trucks_path[i][-1]]['weight']
+
+                        # Discard the solution if the routing cost overtake the best obj result
+                        if(routing_cost > best_obj and best_obj != 0):
+                            break
 
                     if(best_obj == 0):
                         best_obj = routing_cost
