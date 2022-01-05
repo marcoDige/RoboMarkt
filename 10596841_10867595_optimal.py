@@ -170,7 +170,7 @@ def plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_mark
         plt.show()
 
 def main():
-    for i in range(1):
+    for i in range(2):
         
         if i == 0:
             instance = INSTANCE_1

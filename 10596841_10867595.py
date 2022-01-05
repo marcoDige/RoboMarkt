@@ -188,8 +188,9 @@ def plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_mark
 
     # Market Locations with routes plotting
         plt.figure(figsize=(8,6))
-        plt.scatter(cx_markets[1:], cy_markets[1:], c="b")
-        plt.scatter(cx_markets[0], cy_markets[0], c="r")
+        plt.scatter(cx_original[0:], cy_original[0:], c="#DDDEE8", label = "Village")
+        plt.scatter(cx_markets[1:], cy_markets[1:], c="#021ACB", label = "Market")
+        plt.scatter(cx_markets[0], cy_markets[0], c="#FF2D00", label = "Depot")
         for i in range(len(markets)):
             plt.annotate(str(markets[i]), (cx_markets[i], cy_markets[i]))
         color = iter(cm.rainbow(np.linspace(0, 1, len(trucks_path))))
@@ -197,7 +198,10 @@ def plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_mark
             c = next(color)
             for i in range(len(path) - 1):
                 plt.plot([cx_original[path[i] - 1], cx_original[path[i+1] - 1]], [cy_original[path[i] - 1], cy_original[path[i+1] - 1]], c=c, alpha=0.3)
-        plt.title(instance + " Market locations and Trucks' routing")
+        plt.title(instance + " Village and Market locations with Vehicle Routing")
+        plt.xlabel("Cx")
+        plt.ylabel("Cy")
+        plt.legend(loc="upper left")
         plt.show()
 
 # This function write the problem solution in a txt file
