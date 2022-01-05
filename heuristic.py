@@ -20,7 +20,7 @@ def solve_opening_problem(instance):
     ampl = AMPL(Environment(AMPL_INSTALLATION_PATH))
     ampl.set_option('solver', 'cplex')
     # Load the AMPL model from file
-    ampl.read("10596841_10867595_opening.mod")
+    ampl.read("opening_model.mod")
     # Read data
     ampl.read_data(instance + ".dat")
     # Solve the model
