@@ -6,10 +6,11 @@ from scipy.spatial import distance
 import statistics
 import networkx as nx
 import timeit
+import sys
 
 INSTANCE_1 = "minimart-I-50"
 INSTANCE_2 = "minimart-I-100"
-AMPL_INSTALLATION_PATH = "C:\Program Files\\ampl" # Write here the ampl installation path
+AMPL_INSTALLATION_PATH = "C:\Program Files\\ampl"
 
 # This function elaborate an optimal solution of the first half of the problem (opening problem).
 # It uses a cplex solver in an AMPL environment (using the amplpy library) 
@@ -80,7 +81,7 @@ def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
     best_obj = 0
     pz_ub = 50
     pz_lb = 0
-    best_penality_zone = -1
+    best_penalty = -1
     best_trucks_path = []
 
     if(n_to_supply % capacity == 0 and trucks_number == int(n_to_supply / capacity)):
@@ -88,11 +89,11 @@ def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
     else:
         possible_capacity_reduct = int((trucks_number * capacity - n_to_supply)/trucks_number)
     
-    for iteration in range(n_to_supply):
-        for capacity_reductor in range(possible_capacity_reduct + 1):
-            for roundness in range(int(capacity/2)):
-                penality_zone_changed = 0
-                for penality_zone in range(pz_lb,pz_ub + 1):
+    for first_step in range(n_to_supply):
+        for capacity_reducer in range(possible_capacity_reduct + 1):
+            for magnet in range(int(capacity/2)):
+                penalty_changed = 0
+                for penalty in range(pz_lb,pz_ub + 1):
                     # Reset all supply attributes for a new execution
                     for i in G.nodes():
                         G.nodes[i]['supply'] = False
@@ -108,12 +109,12 @@ def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
                         trucks_path[i].append(node)
                         G.nodes[node]['supply'] = True
 
-                        for j in range(capacity - capacity_reductor):
+                        for j in range(capacity - capacity_reducer):
                             next_node = 0
                             priority = {i:G.edges[node, i]['weight'] for i in G.neighbors(node) if(not G.nodes[i]['supply'])}
                             
                             # Last x element has to go closer to the node 1
-                            if(j >= capacity - roundness):
+                            if(j >= capacity - magnet):
                                 root_closeness = {i:G.edges[1, i]['weight'] for i in G.neighbors(1) if(not G.nodes[i]['supply'])}
                                 
                                 for key in priority.keys():
@@ -122,16 +123,16 @@ def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
                             # Normalization of the priority score
                             priority = {key: value/max(priority.values()) for key,value in priority.items()}
 
-                            # Adjust the priority score with +x if the nodes aren'iteration in the same zone
+                            # Adjust the priority score with +x if the nodes aren'first_step in the same zone
                             for key in priority.keys():
                                 if(G.nodes[node]['zone'] != G.nodes[key]['zone']):
-                                    priority[key] += penality_zone/100 
+                                    priority[key] += penalty/100 
 
                             # Sort the priority dict by ascending score
                             priority = {k: v for k, v in sorted(priority.items(), key=lambda item: item[1])}
 
                             if(i == 0 and node == 1):
-                                next_node = list(priority.keys())[iteration]
+                                next_node = list(priority.keys())[first_step]
                             elif(bool(priority)):
                                 next_node = list(priority.keys())[0]
 
@@ -157,26 +158,26 @@ def solve_routing_problem(markets, cx, cy, vc, fc, capacity):
                     if(best_obj == 0):
                         best_obj = routing_cost
                         best_trucks_path = trucks_path
-                        best_penality_zone = penality_zone
-                        penality_zone_changed = 1
+                        best_penalty = penalty
+                        penalty_changed = 1
                     elif(routing_cost < best_obj):
                         best_obj = routing_cost
                         best_trucks_path = trucks_path
-                        best_penality_zone = penality_zone
-                        penality_zone_changed = 1
+                        best_penalty = penalty
+                        penalty_changed = 1
 
-                if(best_penality_zone != 0 and penality_zone_changed):
-                    pz_ub = best_penality_zone + 5
-                    pz_lb = best_penality_zone - 5
+                if(best_penalty != 0 and penalty_changed):
+                    pz_ub = best_penalty + 5
+                    pz_lb = best_penalty - 5
                     if(pz_lb < 0):
                         pz_lb = 0
         
-        # If the best penality zone remain unchanged for a lot of iterations, value upper bound an lower bound will converge
-        if(iteration % trucks_number == 0):
+        # If the best penality zone remain unchanged for a lot of first_steps, value upper bound an lower bound will converge
+        if(first_step % trucks_number == 0):
             pz_ub -= 1
             pz_lb += 1
             if(pz_lb > pz_ub):
-                pz_ub = best_penality_zone
+                pz_ub = best_penalty
                 pz_lb = pz_ub
         
         print("Current best solution: "  + str(best_obj))
@@ -217,13 +218,14 @@ def solution_writer(instance, total_cost, opening_cost, routing_cost, markets, t
         else:
             f.write(str(l))
     f.write("\n")
-    for path in trucks_path:
-        for i in range(len(path)):
-            if(path[i] == 1 and i == 0):
-                f.write(str(path[i]))
+    for i in range(len(trucks_path)):
+        for j in range(len(trucks_path[i])):
+            if(trucks_path[i][j] == 1 and j == 0):
+                f.write(str(trucks_path[i][j]))
             else:
-                f.write("," + str(path[i]))
-        f.write("\n")
+                f.write("," + str(trucks_path[i][j]))
+        if(i < len(trucks_path) - 1):
+            f.write("\n")
 
 def main():
     for i in range(2):
@@ -246,8 +248,6 @@ def main():
         
         print("Elapsed time to solve the problem: ", timer_stop - timer_start)
 
-        plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_markets, trucks_path)
-
         # Total solution
 
         total_cost = opening_cost + routing_cost
@@ -256,6 +256,9 @@ def main():
 
         # Write solution in a txt file
         solution_writer(instance, total_cost, opening_cost, routing_cost, markets, trucks_path)
+
+        if(len(sys.argv) == 2 and sys.argv[1] == '--plot'):
+            plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_markets, trucks_path)
         
     
     
