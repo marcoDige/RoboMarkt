@@ -8,9 +8,9 @@ import networkx as nx
 import timeit
 import sys
 
-INSTANCE_1 = "minimart-I-50"
-INSTANCE_2 = "minimart-I-100"
-AMPL_INSTALLATION_PATH = "C:\Program Files\\ampl"
+INSTANCE_1 = "../datasets/minimart-I-50"
+INSTANCE_2 = "../datasets/minimart-I-100"
+AMPL_INSTALLATION_PATH = "AMPL INTALLATION PATH"
 
 # This function elaborate an optimal solution of the first half of the problem (opening problem).
 # It uses a cplex solver in an AMPL environment (using the amplpy library) 
@@ -208,7 +208,7 @@ def plot_result(instance, cx_original, cy_original, markets, cx_markets, cy_mark
 # This function write the problem solution in a txt file
 def solution_writer(instance, total_cost, opening_cost, routing_cost, markets, trucks_path):
     
-    f = open("solution-" + instance + ".txt","w")
+    f = open("../results/solution-" + instance + ".txt","w")
     f.write(str(total_cost) + "\n")
     f.write(str(opening_cost) + "\n")
     f.write(str(routing_cost) + "\n")
